@@ -1,0 +1,90 @@
+from collections import deque
+
+def hopcroft_minimize(accepting_states, input_alphabet, inverse_transition_func):
+    S = set(accepting_states)
+    for (sym, v), preds in inverse_transition_func.items():
+        S.add(v)
+        S.update(preds)
+
+    if not S:
+        return set()
+
+    F = set(accepting_states)
+    NF = S - F
+
+    blocks = []
+    if F:
+        blocks.append(set(F))
+    if NF:
+        blocks.append(set(NF))
+
+    state_block = {}
+    for idx, blk in enumerate(blocks):
+        for s in blk:
+            state_block[s] = idx
+
+    W = deque()
+    Win = set()
+
+    def add_to_worklist(sym, bidx):
+        if (sym, bidx) not in Win:
+            Win.add((sym, bidx))
+            W.append((sym, bidx))
+
+    if blocks:
+        initial_small = 0 if len(blocks) == 1 or len(blocks[0]) <= len(blocks[1]) else 1
+        for a in input_alphabet:
+            add_to_worklist(a, initial_small)
+
+    while W:
+        a, Bidx = W.popleft()
+        Win.discard((a, Bidx))
+        B = blocks[Bidx]
+        if not B:
+            continue
+
+        X = set()
+        for q in B:
+            X.update(inverse_transition_func.get((a, q), ()))
+
+        if not X:
+            continue
+
+        touched_by_block = {}
+        for q in X:
+            if q in state_block:
+                cidx = state_block[q]
+                bucket = touched_by_block.get(cidx)
+                if bucket is None:
+                    touched_by_block[cidx] = {q}
+                else:
+                    bucket.add(q)
+
+        for Cidx, inter in touched_by_block.items():
+            C = blocks[Cidx]
+            if not inter or len(inter) == len(C):
+                continue
+
+            diff = C - inter
+            keep, move = (diff, inter) if len(diff) >= len(inter) else (inter, diff)
+
+            blocks[Cidx] = keep
+            for s in keep:
+                state_block[s] = Cidx
+
+            C2idx = len(blocks)
+            blocks.append(move)
+            for s in move:
+                state_block[s] = C2idx
+
+            for sym in input_alphabet:
+                if (sym, Cidx) in Win:
+                    add_to_worklist(sym, C2idx)
+                else:
+                    if len(move) <= len(keep):
+                        add_to_worklist(sym, C2idx)
+                    else:
+                        add_to_worklist(sym, Cidx)
+
+    return {frozenset(b) for b in blocks if b}
+
